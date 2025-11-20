@@ -21,10 +21,15 @@ Depends:
  ${misc:Depends},
  ${shlibs:Depends},
 Description: Core package for all Budgie Desktop related services
- Budgie-Desktop is a GTK+ based desktop environment which focuses on
- simplicity and elegance.  It provides a traditional desktop metaphor
- based interface utilising customisable panel based menu driven system.
- Budgie-Desktop is written from scratch utilising many GNOME based
- sub-systems such as GVC and gnome-settings-daemon.
+ Budgie Desktop Services is the central hub and orchestrator for
+ Budgie Desktop. It primarily provides Wayland-native display configuration
+ for the Budgie 10.10 series.
  .
- This package contains core services for Budgie Desktop.
+ Highlights
+ .
+ Wayland-native: Uses wlr-output-management-unstable-v1 to discover and
+ configure outputs.
+ Display Configuration Batch System: Build atomic display configuration
+ changes and apply them safely in one go.
+ Profiles via TOML: Persist and auto-apply display groups matched to
+ current hardware.
