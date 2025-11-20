@@ -1,0 +1,5 @@
+budgie-desktop-services (0.0.1-1) experimental; urgency=medium
+
+  * Initial Release (Closes: #1120910)
+
+ -- David Mohammed <fossfreedom@ubuntu.com>  Mon, 10 Nov 2025 18:55:34 +0000

@@ -1,0 +1,30 @@
+Source: budgie-desktop-services
+Section: misc
+Priority: optional
+Maintainer: David Mohammed <fossfreedom@ubuntu.com>
+Homepage: https://forge.moderndesktop.dev/BuddiesOfBudgie/budgie-desktop-services
+Build-Depends:
+ debhelper-compat (= 13),
+ cmake,
+ extra-cmake-modules,
+ qt6-wayland-dev,
+ qt6-base-dev,
+ kwayland-dev,
+ libtoml11-dev
+Standards-Version: 4.7.2
+Vcs-Browser: https://github.com/ubuntubudgie/budgie-desktop-services/tree/debian
+Vcs-Git: https://github.com/ubuntubudgie/budgie-desktop-services.git -b debian
+
+Package: budgie-desktop-services
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+Description: Core package for all Budgie Desktop related services
+ Budgie-Desktop is a GTK+ based desktop environment which focuses on
+ simplicity and elegance.  It provides a traditional desktop metaphor
+ based interface utilising customisable panel based menu driven system.
+ Budgie-Desktop is written from scratch utilising many GNOME based
+ sub-systems such as GVC and gnome-settings-daemon.
+ .
+ This package contains core services for Budgie Desktop.

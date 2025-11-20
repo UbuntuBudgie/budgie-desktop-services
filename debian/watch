@@ -1,0 +1,4 @@
+Version: 5
+
+Source: https://forge.moderndesktop.dev/BuddiesOfBudgie/budgie-desktop-services/tags
+Matching-Pattern: .*/v@ANY_VERSION@@ARCHIVE_EXT@
