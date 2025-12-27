@@ -12,8 +12,8 @@ Build-Depends:
  kwayland-dev,
  libtoml11-dev
 Standards-Version: 4.7.2
-Vcs-Browser: https://github.com/ubuntubudgie/budgie-desktop-services/tree/debian
-Vcs-Git: https://github.com/ubuntubudgie/budgie-desktop-services.git -b debian
+Vcs-Browser: https://github.com/ubuntubudgie/budgie-desktop-services/tree/debian/latest
+Vcs-Git: https://github.com/ubuntubudgie/budgie-desktop-services.git -b debian/latest
 
 Package: budgie-desktop-services
 Architecture: any
