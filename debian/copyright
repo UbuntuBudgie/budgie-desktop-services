@@ -20,10 +20,6 @@ Files: debian/*
 Copyright: 2025, David Mohammed <fossfreedom@ubuntu.com>
 License: GPL-2+
 
-Files: src/dbus/generated/*
-Copyright: The Qt Company Ltd. and other contributors.
-License: MPL-2.0
-
 Files: src/protocols/*
 Copyright: 2019, Purism SPC
 License: HPND-sell-variant or NTP~disclaimer
