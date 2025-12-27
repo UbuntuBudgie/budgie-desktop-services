@@ -1,12 +1,13 @@
 #pragma once
+
+#include <QDBusContext>
+#include <QObject>
 #include <QSharedPointer>
 
-#include "DisplaySchemaTypes.hpp"
-#include "displays/output-manager/head/WaylandOutputMetaHead.hpp"
-#include "generated/OutputAdaptorGen.h"
+#include "outputs/wlr/metahead.hpp"
 
 namespace bd {
-  class OutputService : public QObject {
+  class OutputService : public QObject, protected QDBusContext {
       Q_OBJECT
       Q_PROPERTY(QString Serial READ Serial)
       Q_PROPERTY(QString Name READ Name)
@@ -24,12 +25,13 @@ namespace bd {
       Q_PROPERTY(uint AdaptiveSync READ AdaptiveSync)
       Q_PROPERTY(bool Primary READ Primary)
       Q_PROPERTY(QString MirrorOf READ MirrorOf)
-      Q_PROPERTY(int HorizontalAnchor READ HorizontalAnchor)
-      Q_PROPERTY(int VerticalAnchor READ VerticalAnchor)
+      Q_PROPERTY(QString HorizontalAnchor READ HorizontalAnchor)
+      Q_PROPERTY(QString VerticalAnchor READ VerticalAnchor)
       Q_PROPERTY(QString RelativeTo READ RelativeTo)
+
     public:
-      OutputService(QSharedPointer<WaylandOutputMetaHead> output, QObject* parent = nullptr);
-      ~OutputService();
+      OutputService(QSharedPointer<Outputs::Wlr::MetaHead> output, QObject* parent = nullptr);
+      ~OutputService() = default;
 
       // Property getters
       QString    Serial() const;
@@ -48,8 +50,8 @@ namespace bd {
       uint       AdaptiveSync() const;
       bool       Primary() const;
       QString    MirrorOf() const;
-      int        HorizontalAnchor() const;
-      int        VerticalAnchor() const;
+      QString    HorizontalAnchor() const;
+      QString    VerticalAnchor() const;
       QString    RelativeTo() const;
 
       // D-Bus methods
@@ -57,7 +59,6 @@ namespace bd {
       Q_INVOKABLE QString     GetCurrentMode();
 
     private:
-      QSharedPointer<WaylandOutputMetaHead> m_output;
-      OutputAdaptor*                        m_adaptor;
+      QSharedPointer<Outputs::Wlr::MetaHead> m_output;
   };
 }
