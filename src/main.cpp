@@ -1,12 +1,15 @@
 #include <QCoreApplication>
 #include <QDBusConnection>
+#include <QDBusMetaType>
+#include <QObject>
 
 #include "config/display.hpp"
-#include "dbus/BatchSystemService.hpp"
-#include "dbus/DisplayObjectManager.hpp"
-#include "dbus/DisplayService.hpp"
-#include "displays/configuration.hpp"
-#include "displays/output-manager/WaylandOutputManager.hpp"
+#include "dbus/ConfigService.hpp"
+#include "dbus/OutputModeService.hpp"
+#include "dbus/OutputService.hpp"
+#include "dbus/OutputsService.hpp"
+#include "outputs/configuration.hpp"
+#include "outputs/state.hpp"
 
 int main(int argc, char* argv[]) {
   QCoreApplication app(argc, argv);
@@ -16,27 +19,60 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  qDBusRegisterMetaType<OutputModesList>();
-  qDBusRegisterMetaType<OutputDetailsList>();
-
   bd::DisplayConfig::instance().parseConfig();
   bd::DisplayConfig::instance().debugOutput();
-  auto& orchestrator = bd::WaylandOrchestrator::instance();
+  auto& orchestrator = bd::Outputs::State::instance();
 
-  app.connect(&orchestrator, &bd::WaylandOrchestrator::orchestratorInitFailed, [](const QString& error) {
+  app.connect(&orchestrator, &bd::Outputs::State::orchestratorInitFailed, [](const QString& error) {
     qFatal() << "Failed to initialize Wayland Orchestrator: " << error;
   });
 
-  app.connect(&orchestrator, &bd::WaylandOrchestrator::ready, &bd::DisplayConfig::instance(), &bd::DisplayConfig::apply);
+  app.connect(&orchestrator, &bd::Outputs::State::ready, &bd::DisplayConfig::instance(), &bd::DisplayConfig::apply);
 
-  bd::DisplayService     displayService;
-  bd::BatchSystemService batchSystemService;
+  bd::OutputsService displayService;
+  bd::ConfigService  configService;
 
-  app.connect(&orchestrator, &bd::WaylandOrchestrator::ready, &bd::DisplayObjectManager::instance(), &bd::DisplayObjectManager::onOutputManagerReady);
+  app.connect(&orchestrator, &bd::Outputs::State::ready, &app, []() {
+    qInfo() << "Wayland Orchestrator ready";
+    qInfo() << "Starting Display DBus Service now (outputs/modes)";
+
+    QMap<QString, bd::OutputService*>     m_outputServices;
+    QMap<QString, bd::OutputModeService*> m_modeServices;
+
+    auto manager = bd::Outputs::State::instance().getManager();
+
+    if (!manager) return;
+
+    if (!QDBusConnection::sessionBus().registerService("org.buddiesofbudgie.Services")) {
+      qCritical() << "Failed to acquire DBus service name org.buddiesofbudgie.Services";
+    }
+
+    for (const auto& output : manager->getHeads()) {
+      if (!output) continue;
+
+      QString outputId = output->getIdentifier();
+
+      if (m_outputServices.contains(outputId)) continue;
+
+      auto* outputService        = new bd::OutputService(output);
+      m_outputServices[outputId] = outputService;
+
+      for (const auto& mode : output->getModes()) {
+        if (!mode) continue;
+
+        QString modeKey = outputId + ":" + mode->getId();
+
+        if (m_modeServices.contains(modeKey)) continue;
+
+        auto* modeService       = new bd::OutputModeService(mode, outputId);
+        m_modeServices[modeKey] = modeService;
+      }
+    }
+  });
 
   orchestrator.init();
 
-  wl_display_roundtrip(bd::WaylandOrchestrator::instance().getDisplay());
+  wl_display_roundtrip(bd::Outputs::State::instance().getDisplay());
 
   return app.exec();
 }
