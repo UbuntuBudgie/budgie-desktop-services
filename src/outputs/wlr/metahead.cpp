@@ -1,15 +1,19 @@
 #include <QCryptographicHash>
 #include <QtAlgorithms>
 #include <optional>
+#include <QDBusConnection>
+#include <QSize>
 
-#include "sys/SysInfo.hpp"
 #include "metahead.hpp"
 #include "head.hpp"
+#include "config/outputs/state.hpp"
+#include "outputs/config/enums/anchors.hpp"
+#include "sys/SysInfo.hpp"
 
 namespace bd::Outputs::Wlr {
-    MetaHead::MetaHead(QObject *parent, KWayland::Client::Registry *registry)
+    MetaHead::MetaHead(QObject *parent)
             : QObject(parent),
-              m_registry(registry),
+              m_built_in(true),
               m_current_mode(nullptr),
               m_head(nullptr),
               m_position(QPoint{0, 0}),
@@ -43,9 +47,6 @@ namespace bd::Outputs::Wlr {
         return m_current_mode;
     }
 
-    QString MetaHead::getDescription() {
-        return m_description;
-    }
 
     QSharedPointer<bd::Outputs::Wlr::Head> MetaHead::getHead() {
         return m_head;
@@ -96,28 +97,9 @@ namespace bd::Outputs::Wlr {
         return m_output_modes;
     }
 
-    QString MetaHead::getMake() {
-        return m_make;
-    }
-
-    QString MetaHead::getModel() {
-        return m_model;
-    }
-
-    QString MetaHead::getName() {
-        return m_name;
-    }
 
     QPoint MetaHead::getPosition() {
         return m_position;
-    }
-
-    double MetaHead::getScale() {
-        return m_scale;
-    }
-
-    int MetaHead::getTransform() {
-        return m_transform;
     }
 
     std::optional<::zwlr_output_head_v1*> MetaHead::getWlrHead() {
@@ -131,19 +113,115 @@ namespace bd::Outputs::Wlr {
         return m_is_available;
     }
 
-    bool MetaHead::isBuiltIn() {
+    bool MetaHead::builtIn() {
         // Generate identifier if necessary
         getIdentifier();
         // Return if identifier exists
-        return !m_identifier.isNull() && !m_identifier.isEmpty();
+        return m_serial.isNull() || m_serial.isEmpty();
     }
 
-    bool MetaHead::isEnabled() {
+    bd::Outputs::OutputModeInfo MetaHead::currentMode() const {
+        if (!m_current_mode) {
+            bd::Outputs::OutputModeInfo empty;
+            empty.id = QString();
+            empty.width = 0;
+            empty.height = 0;
+            empty.refreshRate = 0;
+            empty.preferred = false;
+            return empty;
+        }
+        return m_current_mode->toDBusStruct();
+    }
+
+    bd::Outputs::OutputModesMap MetaHead::modes() const {
+        bd::Outputs::OutputModesMap modes;
+        for (const auto& mode_ptr: m_output_modes) {
+            if (!mode_ptr) continue;
+            modes.insert(mode_ptr->id(), mode_ptr->toDBusStruct());
+        }
+        return modes;
+    }
+
+    QString MetaHead::serial() const {
+        return const_cast<MetaHead*>(this)->getIdentifier();
+    }
+
+    QString MetaHead::name() const {
+        return m_name;
+    }
+
+    QString MetaHead::description() const {
+        return m_description;
+    }
+
+    QString MetaHead::make() const {
+        return m_make;
+    }
+
+    QString MetaHead::model() const {
+        return m_model;
+    }
+
+    bool MetaHead::enabled() const {
         return m_enabled;
     }
 
-    bool MetaHead::isPrimary() {
+    int MetaHead::width() const {
+        auto mode = m_current_mode;
+        if (mode) return mode->getSize().value_or(QSize(0, 0)).width();
+        return 0;
+    }
+
+    int MetaHead::height() const {
+        auto mode = m_current_mode;
+        if (mode) return mode->getSize().value_or(QSize(0, 0)).height();
+        return 0;
+    }
+
+    int MetaHead::x() const {
+        return m_position.x();
+    }
+
+    int MetaHead::y() const {
+        return m_position.y();
+    }
+
+    double MetaHead::scale() const {
+        return m_scale;
+    }
+
+    qulonglong MetaHead::refreshRate() const {
+        auto mode = m_current_mode;
+        if (mode) return static_cast<qulonglong>(mode->getRefresh().value_or(0.0));
+        return 0;
+    }
+
+    quint16 MetaHead::transform() const {
+        return static_cast<quint16>(m_transform);
+    }
+
+    uint MetaHead::adaptiveSync() const {
+        return static_cast<uint>(m_adaptive_sync);
+    }
+
+    bool MetaHead::primary() const {
         return m_primary;
+    }
+
+    QString MetaHead::mirrorOf() const {
+        return QString(); /* TODO: implement if available */
+    }
+
+    QString MetaHead::horizontalAnchor() const {
+        return bd::Outputs::Config::HorizontalAnchor::toString(m_horizontal_anchor);
+    }
+
+    QString MetaHead::verticalAnchor() const {
+        return bd::Outputs::Config::VerticalAnchor::toString(m_vertical_anchor);
+    }
+
+    QString MetaHead::relativeTo() const {
+        return m_relative_output;
     }
 
     // Setters
@@ -155,7 +233,7 @@ namespace bd::Outputs::Wlr {
         emit headAvailable();
         connect(head, &bd::Outputs::Wlr::Head::headFinished, this, &MetaHead::headDisconnected);
         connect(head, &bd::Outputs::Wlr::Head::modeAdded, this, &MetaHead::addMode);
-        connect(head, &bd::Outputs::Wlr::Head::modeChanged, this, &MetaHead::currentModeChanged);
+        connect(head, &bd::Outputs::Wlr::Head::modeChanged, this, &MetaHead::currentZwlrModeChanged);
         connect(head, &bd::Outputs::Wlr::Head::propertyChanged, this, &MetaHead::setProperty);
     }
 
@@ -173,12 +251,15 @@ namespace bd::Outputs::Wlr {
         qDebug() << "Setting position on head" << getIdentifier() << "to" << m_position.x() << m_position.y();
         m_position.setX(position.x());
         m_position.setY(position.y());
-        emit propertyChanged(MetaHeadProperty::Property::Position, QVariant{m_position});
+        emit positionChanged(m_position);
+        emit stateChanged();
     }
 
     void MetaHead::setPrimary(bool primary) {
         if (m_primary == primary) return;
         m_primary = primary;
+        emit primaryChanged(m_primary);
+        emit stateChanged();
     }
 
     void MetaHead::unsetModes() {
@@ -198,33 +279,49 @@ namespace bd::Outputs::Wlr {
 
         connect(output_mode, &bd::Outputs::Wlr::MetaMode::done, this, [this, output_mode, shared_ptr]() {
             // Check if this already exists
+            qDebug() << "Done triggered for mode" << output_mode->id() << "on head" << getIdentifier();
+            auto found_matching_mode = false;
+            auto matching_mode_is_current = false;
+
+            qDebug() << "Checking existing modes for any matches to this one.";
             for (const auto &mode_ptr: m_output_modes) {
                 if (!mode_ptr) continue;
                 auto existing_mode = mode_ptr.data();
-                // Already exists, set the wlr_mode of the existing mode and delete this newly created meta mode
+                qDebug() << "Checking existing mode" << existing_mode->id() << "for a match.";
+                // Already exists, delete the existing mode and add the new one
                 if (existing_mode->isSameAs(output_mode)) {
-                    qDebug() << "Found an output mode that matches one we already have, deleting the new one.";
-                    auto wlr_mode_opt = output_mode->getWlrMode();
-                    if (wlr_mode_opt.has_value() && wlr_mode_opt.value() != nullptr) {
-                        qDebug() << "Setting existing mode to the new wlr_mode.";
-                        existing_mode->setMode(const_cast<::zwlr_output_mode_v1*>(wlr_mode_opt.value()));
-                    }
-//                    shared_ptr.clear();
-                    return;
+                    qDebug() << "Found an output mode (ID: " << existing_mode->id() << ") that matches one we already have, deleting the old one.";
+                    found_matching_mode = true;
+                    m_output_modes.removeOne(mode_ptr);
+
+                    matching_mode_is_current = (m_current_mode == mode_ptr);
+                    
+                    break;
                 }
             }
 
             // Doesn't already exist, add it
-            qDebug() << "Adding new output mode to head: " << getIdentifier() << " with size: "
+            qDebug() << "Adding new output mode (ID: " << output_mode->id() << ") to head: " << getIdentifier() << " with size: "
                      << output_mode->getSize().value_or(QSize(0, 0))
                      << " and refresh: " << static_cast<qulonglong>(output_mode->getRefresh().value_or(0));
+
             m_output_modes.append(shared_ptr);
+
+            emit modesChanged();
+
+            if (found_matching_mode && matching_mode_is_current) {
+                qDebug() << "The old matching mode was the current mode, setting the current mode to the new one.";
+                m_current_mode = shared_ptr;
+                emit currentModeChanged(currentMode());
+            }
+
+            emit stateChanged();
         });
 
         return shared_ptr;
     }
 
-    void MetaHead::currentModeChanged(::zwlr_output_mode_v1 *mode) {
+    void MetaHead::currentZwlrModeChanged(::zwlr_output_mode_v1 *mode) {
         qDebug() << "Current mode changed for output: " << getIdentifier();
         for (const auto &output_mode_ptr: m_output_modes) {
             if (!output_mode_ptr || output_mode_ptr.isNull()) continue;
@@ -249,28 +346,16 @@ namespace bd::Outputs::Wlr {
                 qDebug() << "Setting current mode to" << outputModeSize.width() << "x" << outputModeSize.height() << "@"
                          << refresh;
                 m_current_mode = output_mode_ptr; // Set m_current_mode to same QSharedPointer as iterated output mode
+
+                emit modesChanged();
+                emit widthChanged(outputModeSize.width());
+                emit heightChanged(outputModeSize.height());
+                emit refreshRateChanged(refresh);
+                emit currentModeChanged(currentMode());
+                emit stateChanged();
                 return;
             }
         }
-
-//        auto meta_mode_ptr = addMode(mode); // Add the mode to the list of modes. If it already exists then we'll assign it to an existing Mode
-//        if (meta_mode_ptr.isNull()) {
-//            qWarning() << "Failed to add mode, meta_mode_ptr is null.";
-//            return;
-//        }
-//        auto meta_mode = meta_mode_ptr.data();
-//        if (meta_mode->isAvailable().value()) {
-//            qDebug() << "(Mode already available) Current mode set to:" << meta_mode->getSize().value_or(QSize(0, 0))
-//                     << "with refresh:" << meta_mode->getRefresh().value_or(0);
-//            m_current_mode = meta_mode_ptr; // Set the current mode already since it is available
-//        } else { // Not available yet
-//            connect(meta_mode, &WaylandOutputMetaMode::done, this, [this, meta_mode_ptr, meta_mode]() {
-//                // Set the current mode to the one that was just added
-//                qDebug() << "(Mode done) Current mode set to:" << meta_mode->getSize().value_or(QSize(0, 0))
-//                         << "with refresh:" << meta_mode->getRefresh().value_or(0);
-//                m_current_mode = meta_mode_ptr;
-//            });
-//        }
     }
 
     void MetaHead::headDisconnected() {
@@ -278,6 +363,7 @@ namespace bd::Outputs::Wlr {
         m_head.clear();
         m_is_available = false;
         emit headNoLongerAvailable();
+        emit stateChanged();
     }
 
     void MetaHead::setProperty(MetaHeadProperty::Property property, const QVariant &value) {
@@ -287,40 +373,54 @@ namespace bd::Outputs::Wlr {
             case MetaHeadProperty::Property::AdaptiveSync:
                 m_adaptive_sync = static_cast<QtWayland::zwlr_output_head_v1::adaptive_sync_state>(value.toInt());
                 qDebug() << "Setting adaptive sync on head" << getIdentifier() << "to" << m_adaptive_sync;
+                emit adaptiveSyncChanged(m_adaptive_sync);
                 break;
             case MetaHeadProperty::Property::Description:
                 m_description = value.toString();
-                qDebug() << "Output head finished, emitting headNoLongerAvailable: " << getIdentifier()
-                         << " with description: " << m_description;
+                qDebug() << "Setting description on head" << getIdentifier() << "to" << m_description;
+                emit descriptionChanged(m_description);
                 break;
             case MetaHeadProperty::Property::Enabled:
                 m_enabled = value.toBool();
                 qInfo() << "Setting enabled state on head" << getIdentifier() << "to" << m_enabled;
+                emit enabledChanged(m_enabled);
+                emit stateChanged();
                 break;
             case MetaHeadProperty::Property::Make:
                 m_make = value.toString();
+                qDebug() << "Setting make on head" << getIdentifier() << "to" << m_make;
+                emit makeChanged(m_make);
                 break;
             case MetaHeadProperty::Property::Model:
                 m_model = value.toString();
+                qDebug() << "Setting model on head" << getIdentifier() << "to" << m_model;
+                emit modelChanged(m_model);
                 break;
             case MetaHeadProperty::Property::Name:
                 m_name = value.toString();
+                qDebug() << "Setting name on head" << getIdentifier() << "to" << m_name;
+                emit nameChanged(m_name);
                 break;
             case MetaHeadProperty::Property::Position:
                 m_position = value.toPoint();
                 qDebug() << "Setting position on head" << getIdentifier() << "to" << m_position.x() << m_position.y();
+                emit positionChanged(m_position);
+                emit stateChanged();
                 break;
             case MetaHeadProperty::Property::Scale:
                 m_scale = value.toDouble();
                 qDebug() << "Setting scale on head" << getIdentifier() << "to" << m_scale;
+                emit scaleChanged(m_scale);
                 break;
             case MetaHeadProperty::Property::SerialNumber:
                 m_serial = value.toString();
                 qDebug() << "Setting serial number on head" << getIdentifier() << "to" << m_serial;
+                emit serialChanged(m_serial);
                 break;
             case MetaHeadProperty::Property::Transform:
                 m_transform = value.toInt();
                 qDebug() << "Setting transform on head" << getIdentifier() << "to" << m_transform;
+                emit transformChanged(m_transform);
                 break;
             // None or invalid property
             case MetaHeadProperty::Property::None:
@@ -333,13 +433,13 @@ namespace bd::Outputs::Wlr {
         // If the property was not changed, do nothing
         if (!changed) return;
 
-        emit propertyChanged(property, value);
+        // If we are in shim mode, immediately save the state whenever the head changes
+        if (SysInfo::instance().isShimMode()) {
+            bd::Config::Outputs::State::instance().save();
+        }
     }
 
     // Anchoring/relative configuration accessors
-    QString MetaHead::getRelativeOutput() {
-        return m_relative_output;
-    }
 
     bd::Outputs::Config::HorizontalAnchor::Type MetaHead::getHorizontalAnchor() const {
         return m_horizontal_anchor;
@@ -367,5 +467,21 @@ namespace bd::Outputs::Wlr {
         m_vertical_anchor = vertical;
         qDebug() << "Vertical anchoring set for head" << getIdentifier()
                  << "v:" << bd::Outputs::Config::VerticalAnchor::toString(m_vertical_anchor);
+    }
+
+    // D-Bus registration
+    void MetaHead::registerDbusService() {
+        QString objectPath = QString("/org/buddiesofbudgie/Services/Outputs/%1").arg(getIdentifier());
+        qInfo() << "Registering DBus service for output" << getIdentifier() << "at path" << objectPath;
+        if (!QDBusConnection::sessionBus().registerObject(objectPath, this, QDBusConnection::ExportAllContents)) {
+            qCritical() << "Failed to register DBus object at path" << objectPath;
+            return;
+        }
+
+        // Register all modes for this output
+        for (const auto& mode : m_output_modes) {
+            if (!mode) continue;
+            mode->registerDbusService();
+        }
     }
 }

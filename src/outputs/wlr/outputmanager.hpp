@@ -1,5 +1,6 @@
 #pragma once
 
+#include <KWayland/Client/output.h>
 #include <KWayland/Client/registry.h>
 #include <QObject>
 #include <QSharedPointer>
@@ -27,9 +28,11 @@ namespace bd::Outputs::Wlr {
   
         uint32_t getSerial();
         uint32_t getVersion();
-  
+
       signals:
         void done();
+        void headAdded(QSharedPointer<bd::Outputs::Wlr::MetaHead> head);
+        void headRemoved(QSharedPointer<bd::Outputs::Wlr::MetaHead> head);
   
       protected:
         void zwlr_output_manager_v1_head(zwlr_output_head_v1* head) override;
@@ -37,6 +40,7 @@ namespace bd::Outputs::Wlr {
         void zwlr_output_manager_v1_done(uint32_t serial) override;
   
       private:
+
         KWayland::Client::Registry*                   m_registry;
         QList<QSharedPointer<bd::Outputs::Wlr::MetaHead>> m_heads;
         uint32_t                                      m_serial;
