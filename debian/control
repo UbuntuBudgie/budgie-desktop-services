@@ -11,7 +11,7 @@ Build-Depends:
  qt6-base-dev,
  kwayland-dev,
  libtoml11-dev
-Standards-Version: 4.7.2
+Standards-Version: 4.7.3
 Vcs-Browser: https://github.com/ubuntubudgie/budgie-desktop-services
 Vcs-Git: https://github.com/ubuntubudgie/budgie-desktop-services.git
 
