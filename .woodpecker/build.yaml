@@ -1,0 +1,13 @@
+when:
+  - event: push
+    branch: main
+  - event: manual
+    branch: main
+  - event: pull_request
+    branch: main
+steps:
+  - name: Compilation Test
+    image: quay.io/buddiesofbudgie/ci-optimized-images:budgie-desktop-services
+    commands:
+      - cmake -DCMAKE_INSTALL_PREFIX=/usr -S . -B build -G Ninja
+      - cmake --build build -v

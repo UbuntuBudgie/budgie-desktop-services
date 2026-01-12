@@ -1,78 +1,40 @@
-#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusMetaType>
+#include <QGuiApplication>
 #include <QObject>
 
-#include "config/display.hpp"
+#include "config/outputs/state.hpp"
 #include "dbus/ConfigService.hpp"
-#include "dbus/OutputModeService.hpp"
-#include "dbus/OutputService.hpp"
-#include "dbus/OutputsService.hpp"
-#include "outputs/configuration.hpp"
 #include "outputs/state.hpp"
+#include "outputs/types.hpp"
 
 int main(int argc, char* argv[]) {
-  QCoreApplication app(argc, argv);
+  QGuiApplication app(argc, argv);
+  // Register meta types
+  qDBusRegisterMetaType<bd::Outputs::NestedKvMap>();
+  qDBusRegisterMetaType<bd::Outputs::OutputModeInfo>();
+  qDBusRegisterMetaType<bd::Outputs::OutputModesMap>();
+
   qSetMessagePattern("[%{type}] %{if-debug}[%{file}:%{line} %{function}]%{endif}%{message}");
   if (!QDBusConnection::sessionBus().isConnected()) {
     qCritical() << "Cannot connect to the session bus";
     return EXIT_FAILURE;
   }
 
-  bd::DisplayConfig::instance().parseConfig();
-  bd::DisplayConfig::instance().debugOutput();
+  auto& state = bd::Config::Outputs::State::instance();
+
+  state.deserialize();
   auto& orchestrator = bd::Outputs::State::instance();
 
   app.connect(&orchestrator, &bd::Outputs::State::orchestratorInitFailed, [](const QString& error) {
     qFatal() << "Failed to initialize Wayland Orchestrator: " << error;
   });
 
-  app.connect(&orchestrator, &bd::Outputs::State::ready, &bd::DisplayConfig::instance(), &bd::DisplayConfig::apply);
+  app.connect(&orchestrator, &bd::Outputs::State::ready, &state, &bd::Config::Outputs::State::apply);
 
-  bd::OutputsService displayService;
-  bd::ConfigService  configService;
-
-  app.connect(&orchestrator, &bd::Outputs::State::ready, &app, []() {
-    qInfo() << "Wayland Orchestrator ready";
-    qInfo() << "Starting Display DBus Service now (outputs/modes)";
-
-    QMap<QString, bd::OutputService*>     m_outputServices;
-    QMap<QString, bd::OutputModeService*> m_modeServices;
-
-    auto manager = bd::Outputs::State::instance().getManager();
-
-    if (!manager) return;
-
-    if (!QDBusConnection::sessionBus().registerService("org.buddiesofbudgie.Services")) {
-      qCritical() << "Failed to acquire DBus service name org.buddiesofbudgie.Services";
-    }
-
-    for (const auto& output : manager->getHeads()) {
-      if (!output) continue;
-
-      QString outputId = output->getIdentifier();
-
-      if (m_outputServices.contains(outputId)) continue;
-
-      auto* outputService        = new bd::OutputService(output);
-      m_outputServices[outputId] = outputService;
-
-      for (const auto& mode : output->getModes()) {
-        if (!mode) continue;
-
-        QString modeKey = outputId + ":" + mode->getId();
-
-        if (m_modeServices.contains(modeKey)) continue;
-
-        auto* modeService       = new bd::OutputModeService(mode, outputId);
-        m_modeServices[modeKey] = modeService;
-      }
-    }
-  });
+  bd::ConfigService configService;
 
   orchestrator.init();
-
-  wl_display_roundtrip(bd::Outputs::State::instance().getDisplay());
 
   return app.exec();
 }
