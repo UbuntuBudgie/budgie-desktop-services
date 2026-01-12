@@ -1,11 +1,5 @@
-budgie-desktop-services (1.0.0-1) UNRELEASED; urgency=medium
-
-  * New upstream release
-
- -- David Mohammed <fossfreedom@ubuntu.com>  Mon, 12 Jan 2026 19:26:17 +0000
-
-budgie-desktop-services (0.0.2-1) experimental; urgency=medium
+budgie-desktop-services (1.0.0-1) experimental; urgency=medium
 
   * Initial Release (Closes: #1120910)
 
- -- David Mohammed <fossfreedom@ubuntu.com>  Sat, 27 Dec 2025 21:58:29 +0000
+ -- David Mohammed <fossfreedom@ubuntu.com>  Mon, 12 Jan 2026 19:26:17 +0000
