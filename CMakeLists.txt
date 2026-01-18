@@ -4,7 +4,7 @@
 
 cmake_minimum_required(VERSION 3.20)
 
-project(budgie-desktop-services VERSION 1.0.0)
+project(budgie-desktop-services VERSION 1.0.2)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -45,7 +45,7 @@ find_package(toml11 REQUIRED)
 
 option(INSTALL_DESKTOP_FILE "Install desktop file" OFF)
 option(INSTALL_SERVICE_FILES "Install service files for autostarting" OFF)
-option(INSTALL_LABWC "Install autostart files for labwc" ON)
+option(INSTALL_LABWC "Install autostart files for labwc" OFF)
 
 add_subdirectory(src)
 
