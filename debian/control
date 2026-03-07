@@ -18,6 +18,7 @@ Vcs-Git: https://github.com/ubuntubudgie/budgie-desktop-services.git
 Package: budgie-desktop-services
 Architecture: any
 Depends:
+ libqt6wlshellintegration6,
  ${misc:Depends},
  ${shlibs:Depends},
 Description: Core package for all Budgie Desktop related services
