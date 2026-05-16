@@ -1,0 +1,117 @@
+Origin: commit:a3c889c390431efab4afbb87938ec60f644bd623
+Author: David Mohammed <fossfreedom@ubuntu.com>
+Last-Update: 2026-04-25
+Description: [PATCH] fix(outputs): don't try to use metahead repeatedly especially
+ after a suspend-resume cycle (#34)
+
+This should hopefully resolve #33.  From the trace file you can see the metahead is just cycling very fast until probably (I'm guessing) memory issues causes the app to crash.
+
+This PR basically adds some guards around metahead creation and metahead usage (in outputmanager) to prevent this cycling.
+
+Reviewed-on: https://forge.moderndesktop.dev/BuddiesOfBudgie/budgie-desktop-services/pulls/34
+Co-authored-by: David Mohammed <fossfreedom@ubuntu.com>
+Co-committed-by: David Mohammed <fossfreedom@ubuntu.com>
+---
+ src/outputs/wlr/metahead.cpp      |  9 +++++++-
+ src/outputs/wlr/outputmanager.cpp | 35 +++++++++++++++++--------------
+ src/outputs/wlr/outputmanager.hpp |  1 +
+ 3 files changed, 28 insertions(+), 17 deletions(-)
+
+diff --git a/src/outputs/wlr/metahead.cpp b/src/outputs/wlr/metahead.cpp
+index 4a3979b..809ff80 100644
+--- a/src/outputs/wlr/metahead.cpp
++++ b/src/outputs/wlr/metahead.cpp
+@@ -227,10 +227,17 @@ namespace bd::Outputs::Wlr {
+     // Setters
+ 
+     void MetaHead::setHead(::zwlr_output_head_v1 *wlr_head) {
++
++        // check if wlroots is just reannouncing the same head (i.e. after a resume)
++        if (m_head && m_head->getWlrHead() == wlr_head) {
++            return;
++        }
++
+         auto head = new bd::Outputs::Wlr::Head(this, wlr_head);
+         m_head = QSharedPointer<bd::Outputs::Wlr::Head>(head);
+         m_is_available = true;
+         emit headAvailable();
++
+         connect(head, &bd::Outputs::Wlr::Head::headFinished, this, &MetaHead::headDisconnected);
+         connect(head, &bd::Outputs::Wlr::Head::modeAdded, this, &MetaHead::addMode);
+         connect(head, &bd::Outputs::Wlr::Head::modeChanged, this, &MetaHead::currentZwlrModeChanged);
+@@ -295,7 +302,7 @@ namespace bd::Outputs::Wlr {
+                     m_output_modes.removeOne(mode_ptr);
+ 
+                     matching_mode_is_current = (m_current_mode == mode_ptr);
+-                    
++
+                     break;
+                 }
+             }
+diff --git a/src/outputs/wlr/outputmanager.cpp b/src/outputs/wlr/outputmanager.cpp
+index 111e198..a83d2a8 100644
+--- a/src/outputs/wlr/outputmanager.cpp
++++ b/src/outputs/wlr/outputmanager.cpp
+@@ -15,28 +15,31 @@ namespace bd::Outputs::Wlr {
+ 
+     // Overridden methods from QtWayland::zwlr_output_manager_v1
+     void OutputManager::zwlr_output_manager_v1_head(zwlr_output_head_v1* wlr_head) {
++        // resolve the identity of the existing heads
++        for (const auto& existingHead : m_heads) {
++            if (existingHead->getWlrHead().has_value() && existingHead->getWlrHead().value() == wlr_head) {
++                qDebug() << "previously known head - updating to use the existing head" << existingHead->getIdentifier();
++                existingHead->setHead(wlr_head);
++                return;
++            }
++        }
++
++        // need to create the metahead if not previously known about
+         auto head = new bd::Outputs::Wlr::MetaHead(nullptr);
+         qInfo() << "OutputManager::zwlr_output_manager_v1_head with id:" << head->getIdentifier() << ", description:" << head->description();
+ 
+         connect(head, &bd::Outputs::Wlr::MetaHead::headAvailable, this, [this, head]() {
+-            qDebug() << "Head available for output: " << head->getIdentifier();
+-            bool headAlreadyExists = false;
+-            for (const auto& existingHead : m_heads) {
+-                qDebug() << "Checking existing head: " << existingHead->getIdentifier();
+-                if (existingHead->getIdentifier() == head->getIdentifier()) {
+-                qDebug() << "Head already exists for output: " << head->getIdentifier();
+-                headAlreadyExists = true;
+-                existingHead->setHead(head->getWlrHead().value());
+-                break;
+-                }
++            if (m_inhead) {
++                qDebug() << "head processing already in progress, skipping";
++                return;
+             }
++            m_inhead=true;
++            qDebug() << "Head available for output: " << head->getIdentifier();
++            auto sharedHead = QSharedPointer<bd::Outputs::Wlr::MetaHead>(head);
++            m_heads.append(sharedHead);
++            emit headAdded(sharedHead);
+ 
+-            if (!headAlreadyExists) {
+-                qDebug() << "Adding new head for output: " << head->getIdentifier();
+-                auto sharedHead = QSharedPointer<bd::Outputs::Wlr::MetaHead>(head);
+-                m_heads.append(sharedHead);
+-                emit headAdded(sharedHead);
+-            }
++            m_inhead=false;
+         });
+ 
+         head->setHead(wlr_head);
+diff --git a/src/outputs/wlr/outputmanager.hpp b/src/outputs/wlr/outputmanager.hpp
+index 252defc..ef4ad8d 100644
+--- a/src/outputs/wlr/outputmanager.hpp
++++ b/src/outputs/wlr/outputmanager.hpp
+@@ -43,6 +43,7 @@ namespace bd::Outputs::Wlr {
+ 
+         KWayland::Client::Registry*                   m_registry;
+         QList<QSharedPointer<bd::Outputs::Wlr::MetaHead>> m_heads;
++        bool                                          m_inhead = false;
+         uint32_t                                      m_serial;
+         bool                                          m_has_serial;
+         uint32_t                                      m_version;
+-- 
+2.53.0
+

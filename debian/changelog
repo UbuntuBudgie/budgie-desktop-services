@@ -1,3 +1,13 @@
+budgie-desktop-services (1.0.2-4) unstable; urgency=medium
+
+  * Bug-fix
+    resolve segmentation faults with multiple monitors due to cycling
+    repeatedly for the external monitor metahead after a
+    suspend-resume cycle (LP: #2152807)
+    0001-fix-outputs-don-t-try-to-use-metahead-repeatedly-esp.patch
+
+ -- David Mohammed <fossfreedom@ubuntu.com>  Sat, 16 May 2026 22:13:38 +0100
+
 budgie-desktop-services (1.0.2-3) unstable; urgency=medium
 
   * Upload to unstable now that all budgie components have been assembled
